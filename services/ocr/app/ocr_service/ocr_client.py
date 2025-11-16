@@ -1,0 +1,96 @@
+from __future__ import annotations
+
+import asyncio
+import base64
+import logging
+from typing import Iterable, List
+
+from openai import AsyncOpenAI
+from PIL import Image
+
+from .config import Settings
+from .exceptions import OCRProcessException
+
+logger = logging.getLogger(__name__)
+
+
+class DeepSeekOCRClient:
+    def __init__(self, settings: Settings):
+        self._settings = settings
+        self._client = AsyncOpenAI(
+            api_key=settings.deepseek_api_key,
+            base_url=settings.deepseek_api_base,
+            timeout=settings.deepseek_request_timeout,
+        )
+        self._semaphore = asyncio.Semaphore(settings.max_workers)
+
+    async def process_images(
+        self,
+        images: Iterable[Image.Image],
+        prompt: str,
+        *,
+        skip_special_tokens: bool,
+    ) -> List[str]:
+        tasks = [
+            self._process_single(
+                image,
+                prompt,
+                idx,
+                skip_special_tokens=skip_special_tokens,
+            )
+            for idx, image in enumerate(images)
+        ]
+        return await asyncio.gather(*tasks)
+
+    async def _process_single(
+        self,
+        image: Image.Image,
+        prompt: str,
+        index: int,
+        *,
+        skip_special_tokens: bool,
+    ) -> str:
+        async with self._semaphore:
+            image_b64 = await asyncio.get_running_loop().run_in_executor(
+                None, self._image_to_base64, image
+            )
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/png;base64,{image_b64}"},
+                        },
+                        {"type": "text", "text": prompt},
+                    ],
+                }
+            ]
+            try:
+                response = await self._client.chat.completions.create(
+                    model=self._settings.deepseek_model,
+                    messages=messages,
+                    max_tokens=self._settings.deepseek_max_tokens,
+                    temperature=self._settings.deepseek_temperature,
+                    extra_body={
+                        "skip_special_tokens": skip_special_tokens,
+                        "vllm_xargs": self._settings.deepseek_vllm_xargs,
+                    },
+                )
+            except Exception as exc:  # pragma: no cover
+                logger.exception("DeepSeek OCR request failed for page %s", index)
+                raise OCRProcessException(str(exc)) from exc
+
+            content = response.choices[0].message.content
+            if not content:
+                raise OCRProcessException("Empty OCR response")
+
+            return content
+
+    @staticmethod
+    def _image_to_base64(image: Image.Image) -> str:
+        import io
+
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        return base64.b64encode(buffer.getvalue()).decode("utf-8")
