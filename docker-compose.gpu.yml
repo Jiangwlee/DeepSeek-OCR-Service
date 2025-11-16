@@ -1,0 +1,129 @@
+version: "3.9"
+
+services:
+  minio:
+    image: minio/minio:latest
+    container_name: ${COMPOSE_PROJECT_NAME:-deepseek-ocr}-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_REGION: ${MINIO_REGION}
+    volumes:
+      - ${MINIO_DATA_DIR:-./.data/minio/data}:/data
+      - ${MINIO_CONFIG_DIR:-./.data/minio/config}:/root/.minio
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    networks:
+      - deepseek-internal
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_started
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKETS: ${MINIO_BUCKETS}
+      MINIO_PUBLIC_BUCKET: ${MINIO_PUBLIC_BUCKET:-}
+    entrypoint: ["/bin/sh"]
+    command:
+      - -c
+      - |
+        set -euo pipefail
+        until mc alias set deepseek http://minio:9000 "${MINIO_ROOT_USER}" "${MINIO_ROOT_PASSWORD}"; do
+          echo "Waiting for MinIO to become reachable..."
+          sleep 3
+        done
+        for bucket in $(echo "${MINIO_BUCKETS}" | tr ',' ' '); do
+          if [ -z "$${bucket}" ]; then
+            continue
+          fi
+          mc mb --ignore-existing deepseek/$${bucket}
+        done
+        if [ -n "${MINIO_PUBLIC_BUCKET}" ]; then
+          mc anonymous set download deepseek/${MINIO_PUBLIC_BUCKET}
+        fi
+        echo "MinIO buckets ready: ${MINIO_BUCKETS}"
+    restart: "no"
+    networks:
+      - deepseek-internal
+
+  ocr:
+    build:
+      context: .
+      dockerfile: services/ocr/Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME:-deepseek-ocr}-ocr
+    environment:
+      OCR_DEEPSEEK_API_BASE: ${OCR_DEEPSEEK_API_BASE:-http://deepseek-ocr:8000/v1}
+      OCR_DEEPSEEK_API_KEY: ${OCR_DEEPSEEK_API_KEY:-EMPTY}
+      OCR_DEEPSEEK_MODEL: ${OCR_DEEPSEEK_MODEL:-deepseek-ai/DeepSeek-OCR}
+      OCR_DEEPSEEK_REQUEST_TIMEOUT: ${OCR_DEEPSEEK_REQUEST_TIMEOUT:-3600}
+      OCR_DEEPSEEK_MAX_TOKENS: ${OCR_DEEPSEEK_MAX_TOKENS:-2048}
+      OCR_DEEPSEEK_TEMPERATURE: ${OCR_DEEPSEEK_TEMPERATURE:-0.0}
+      OCR_DEEPSEEK_SKIP_SPECIAL_TOKENS: ${OCR_DEEPSEEK_SKIP_SPECIAL_TOKENS:-false}
+      OCR_PDF_DPI: ${OCR_PDF_DPI:-144}
+      OCR_MAX_WORKERS: ${OCR_MAX_WORKERS:-4}
+      OCR_MINIO_ENABLED: ${OCR_MINIO_ENABLED:-true}
+      OCR_MINIO_ENDPOINT: ${OCR_MINIO_ENDPOINT:-http://minio:9000}
+      OCR_MINIO_ACCESS_KEY: ${OCR_MINIO_ACCESS_KEY:-deepseekadmin}
+      OCR_MINIO_SECRET_KEY: ${OCR_MINIO_SECRET_KEY:-deepseeksecret}
+      OCR_MINIO_SECURE: ${OCR_MINIO_SECURE:-false}
+      OCR_MINIO_DEFAULT_BUCKET: ${OCR_MINIO_DEFAULT_BUCKET:-ocr-results}
+      OCR_PERSIST_RESULTS_BY_DEFAULT: ${OCR_PERSIST_RESULTS_BY_DEFAULT:-false}
+      OCR_PADDLE_ENDPOINT: ${OCR_PADDLE_ENDPOINT:-http://paddle-ocr:9000}
+      OCR_PADDLE_TIMEOUT: ${OCR_PADDLE_TIMEOUT:-60}
+    ports:
+      - "${OCR_HTTP_PORT:-8001}:8001"
+    depends_on:
+      minio:
+        condition: service_started
+      deepseek-ocr:
+        condition: service_started
+    networks:
+      - deepseek-internal
+
+  paddle-ocr:
+    build:
+      context: .
+      dockerfile: services/paddle-ocr/Dockerfile
+      args:
+        BASE_IMAGE: ${PADDLE_BASE_IMAGE:-paddlepaddle/paddle:3.2.2-gpu-cuda12.6-cudnn9.5}
+    container_name: ${COMPOSE_PROJECT_NAME:-deepseek-ocr}-paddle
+    environment:
+      PADDLE_LANG: ${PADDLE_LANG:-ch}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    networks:
+      - deepseek-internal
+
+  deepseek-ocr:
+    build:
+      context: .
+      dockerfile: services/deepseek-ocr/Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME:-deepseek-ocr}-deepseek
+    environment:
+      CUDA_VISIBLE_DEVICES: ${DEEPSEEK_CUDA_VISIBLE_DEVICES:-0}
+    ports:
+      - "${DEEPSEEK_HTTP_PORT:-8000}:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    networks:
+      - deepseek-internal
+
+networks:
+  deepseek-internal:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+          gateway: 172.30.0.1
