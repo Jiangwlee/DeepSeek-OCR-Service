@@ -120,6 +120,29 @@ Key environment variables (see `.env.example`):
 
 Each request returns a structured payload with page-level OCR results plus the combined text. When `store_result=true`, the service writes the final text into MinIO (defaults to the `ocr-results` bucket).
 
+### Quick API examples (curl)
+
+Image (PNG/JPEG) → plain text, DeepSeek 后端：
+
+```bash
+curl -X POST http://localhost:8001/v1/ocr/document/upload \
+  -F "file=@./samples/demo.png" \
+  -F "output_format=plain_text" \
+  -F "provider=deepseek"
+```
+
+DOC/DOCX → 自动转 PDF → Markdown，Paddle 后端（需开启 `document-converter` + `paddle-ocr`，依赖 MinIO）：
+
+```bash
+curl -X POST http://localhost:8001/v1/ocr/document/upload \
+  -F "file=@./samples/demo.docx" \
+  -F "output_format=markdown" \
+  -F "provider=paddle" \
+  -F "store_result=true"
+```
+
+返回字段包含 `pages`（分页面文本）、`combined_text`（合并后文本），以及存储到 MinIO 的 bucket/object 信息（若 `store_result=true`）。
+
 ## Next Steps
 
 1. **Document converter**: wrap LibreOffice container and wire it into the orchestrator.
