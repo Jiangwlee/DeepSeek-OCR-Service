@@ -6,7 +6,7 @@ import uuid
 import httpx
 from fastapi import Depends, FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from gradio.routes import mount_gradio_app
 
 from .dependencies import get_orchestrator
@@ -49,17 +49,7 @@ async def ocr_from_storage(
     request: StorageOCRRequest,
     orchestrator=Depends(get_orchestrator),
 ):
-    storage = orchestrator.storage
-    if not storage:
-        raise StorageUnavailableError("Storage client not configured")
-    data = storage.fetch(request.source.bucket, request.source.object_name)
-    filename = request.source.object_name.rsplit("/", 1)[-1]
-    return await orchestrator.process_bytes(
-        filename=filename,
-        content_type=None,
-        data=data,
-        options=request,
-    )
+    return await orchestrator.process_storage(request)
 
 
 @app.post("/v1/ocr/document/from-url", response_model=DocumentResult)
@@ -67,18 +57,7 @@ async def ocr_from_url(
     request: URLOCRRequest,
     orchestrator=Depends(get_orchestrator),
 ):
-    async with httpx.AsyncClient() as client:
-        response = await client.get(request.source.url)
-        response.raise_for_status()
-        content_type = response.headers.get("content-type")
-        filename = request.source.url.split("/")[-1] or f"remote-{uuid.uuid4().hex}"
-        data = response.content
-    return await orchestrator.process_bytes(
-        filename=filename,
-        content_type=content_type,
-        data=data,
-        options=request,
-    )
+    return await orchestrator.process_url(request)
 
 
 @app.exception_handler(OCRException)

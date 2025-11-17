@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 from dataclasses import dataclass
 from typing import Optional
+from datetime import timedelta
 
 from minio import Minio
 from urllib.parse import urlparse
@@ -57,3 +58,19 @@ class StorageClient:
             length=len(data),
             content_type=content_type,
         )
+
+    def upload_bytes(self, bucket: str, object_name: str, data: bytes, content_type: Optional[str] = None) -> None:
+        self._client.put_object(
+            bucket,
+            object_name,
+            data=io.BytesIO(data),
+            length=len(data),
+            content_type=content_type,
+        )
+
+    def presign_get(self, bucket: str, object_name: str, expires: int = 3600) -> str:
+        try:
+            exp = timedelta(seconds=expires) if isinstance(expires, int) else expires
+            return self._client.presigned_get_object(bucket, object_name, expires=exp)
+        except Exception as exc:  # pragma: no cover
+            raise StorageUnavailableError(str(exc)) from exc

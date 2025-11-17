@@ -2,18 +2,25 @@ ARG BASE_IMAGE=paddlepaddle/paddle:3.2.2
 FROM ${BASE_IMAGE}
 
 ENV PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    DEBIAN_FRONTEND=noninteractive \
+    TZ=Asia/Shanghai
 
 WORKDIR /app
 
-# 官方镜像已包含 Paddle 环境，补充运行依赖
+# 系统依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1 libglib2.0-0 libsm6 libxrender1 libxext6 \
+    libgl1 libglib2.0-0 libsm6 libxrender1 libxext6 libgomp1 tzdata \
+    && ln -snf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
+    && echo "Asia/Shanghai" >/etc/timezone \
     && rm -rf /var/lib/apt/lists/*
 
-COPY services/paddle-ocr/requirements.txt ./requirements.txt
+# Python 依赖
+ARG REQUIREMENTS_FILE=services/paddle-ocr/requirements.cpu.txt
+COPY ${REQUIREMENTS_FILE} ./requirements.txt
 RUN pip config set global.index-url https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple && \
-    pip install --upgrade pip && pip install -r requirements.txt
+    pip install --upgrade pip && pip install -r requirements.txt && \
+    rm -rf /root/.cache/pip
 
 COPY services/paddle-ocr/app ./app
 

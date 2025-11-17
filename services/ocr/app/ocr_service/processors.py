@@ -71,6 +71,7 @@ class ImageProcessor(BaseProcessor):
 class ProcessorFactory:
     IMAGE_MIME_PREFIX = "image/"
     IMAGE_SUFFIXES = {"png", "jpg", "jpeg", "webp", "bmp"}
+    DOC_SUFFIXES = {"doc", "docx"}
 
     @staticmethod
     def get_processor(payload: FilePayload, settings: Settings) -> BaseProcessor:
@@ -82,5 +83,7 @@ class ProcessorFactory:
             return PDFProcessor(settings)
         if suffix in ProcessorFactory.IMAGE_SUFFIXES:
             return ImageProcessor(settings)
-
+        if suffix in ProcessorFactory.DOC_SUFFIXES:
+            # 占位：doc/docx 会在 orchestrator 层转 pdf 再选 processor，这里抛错避免误用
+            raise UnsupportedFileTypeError("doc/docx should be converted to pdf before processing")
         raise UnsupportedFileTypeError(f"Unsupported file type: {suffix or payload.content_type}")

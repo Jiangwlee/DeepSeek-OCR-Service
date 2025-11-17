@@ -18,18 +18,22 @@ RUN apt-get update && apt-get install -y \
     libreoffice-impress \
     fonts-dejavu \
     fonts-noto-cjk \
+    tzdata \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# 设置时区
+RUN ln -snf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && echo "Asia/Shanghai" >/etc/timezone
 
 # Create work directory
 WORKDIR /app
 
 # Copy requirements.txt
-COPY requirements.txt .
+COPY services/document-converter/requirements.txt .
 RUN pip config set global.index-url https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple && \
     pip install --no-cache-dir -r requirements.txt
 
 # Code codes
-COPY app ./app
+COPY services/document-converter/app ./app
 
 # Expose ports
 EXPOSE 8000

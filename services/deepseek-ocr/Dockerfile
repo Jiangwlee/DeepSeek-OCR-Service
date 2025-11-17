@@ -1,9 +1,15 @@
 FROM nvidia/cuda:12.1.1-devel-ubuntu22.04
 
+ENV DEBIAN_FRONTEND=noninteractive \
+    TZ=Asia/Shanghai
+
 WORKDIR /app
 
 # 安装系统依赖
-RUN apt-get update && apt-get install -y python3-pip python3-venv git curl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y python3-pip python3-venv git curl tzdata && \
+    ln -snf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
+    echo "Asia/Shanghai" >/etc/timezone && \
+    rm -rf /var/lib/apt/lists/*
 
 # 创建虚拟环境
 RUN python3 -m venv /app/venv
@@ -19,8 +25,8 @@ RUN pip install --upgrade pip
 RUN pip install modelscope
 RUN pip install -U vllm --pre --extra-index-url https://wheels.vllm.ai/nightly
 
-# 复制启动脚本
-COPY run_deepseek_ocr_service.sh /app/run_deepseek_ocr_service.sh
+# 复制启动脚本（注意：构建上下文为仓库根目录）
+COPY services/deepseek-ocr/run-deepseek-ocr-service.sh /app/run-deepseek-ocr-service.sh
 
 # 设置环境变量
 ENV CUDA_VISIBLE_DEVICES=0
@@ -28,4 +34,4 @@ ENV PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 ENV VLLM_USE_MODELSCOPE=True
 
 # 设置启动命令
-CMD ["bash", "/app/run_deepseek_ocr_service.sh"]
+CMD ["bash", "/app/run-deepseek-ocr-service.sh"]

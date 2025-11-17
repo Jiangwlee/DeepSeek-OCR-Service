@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
 
     # DeepSeek OCR endpoint configuration
-    deepseek_api_base: str = "http://ubuntu-mindora.local:8000/v1"
+    deepseek_api_base: str = "http://deepseek-ocr:8000/v1"
     deepseek_api_key: str = "EMPTY"
     deepseek_model: str = "deepseek-ai/DeepSeek-OCR"
     deepseek_request_timeout: int = 3600
@@ -45,12 +45,18 @@ class Settings(BaseSettings):
 
     # Storage / MinIO
     minio_enabled: bool = True
-    minio_endpoint: str = "http://localhost:9000"
+    minio_endpoint: str = "http://minio:9000"
     minio_access_key: str = "deepseekadmin"
     minio_secret_key: str = "deepseeksecret"
     minio_secure: bool = False
     minio_region: Optional[str] = None
-    minio_default_bucket: str = "ocr-results"
+    # Bucket layout
+    minio_default_bucket: str = "ocr-results"  # result bucket (backward compatibility)
+    minio_raw_bucket: str = "raw-docs"
+    minio_converted_pdf_bucket: str = "converted-pdf"
+    minio_page_images_bucket: str = "page-images"
+    minio_presign_expiry: int = 3600
+    doc_converter_endpoint: str = "http://document-converter:8000"
 
     # Result persistence
     persist_results_by_default: bool = False

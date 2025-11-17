@@ -3,10 +3,11 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
-from typing import Iterable, List
+from typing import Iterable, List, Optional
 
 from openai import AsyncOpenAI
 from PIL import Image
+from urllib.parse import quote
 
 from .config import Settings
 from .exceptions import OCRProcessException
@@ -26,7 +27,7 @@ class DeepSeekOCRClient:
 
     async def process_images(
         self,
-        images: Iterable[Image.Image],
+        images: Iterable[Image.Image] | Iterable[str],
         prompt: str,
         *,
         skip_special_tokens: bool,
@@ -44,23 +45,28 @@ class DeepSeekOCRClient:
 
     async def _process_single(
         self,
-        image: Image.Image,
+        image: Image.Image | str,
         prompt: str,
         index: int,
         *,
         skip_special_tokens: bool,
     ) -> str:
         async with self._semaphore:
-            image_b64 = await asyncio.get_running_loop().run_in_executor(
-                None, self._image_to_base64, image
-            )
+            if isinstance(image, Image.Image):
+                image_b64 = await asyncio.get_running_loop().run_in_executor(
+                    None, self._image_to_base64, image
+                )
+                image_url_payload = {"url": f"data:image/png;base64,{image_b64}"}
+            else:
+                # assume already a URL
+                image_url_payload = {"url": image}
             messages = [
                 {
                     "role": "user",
                     "content": [
                         {
                             "type": "image_url",
-                            "image_url": {"url": f"data:image/png;base64,{image_b64}"},
+                            "image_url": image_url_payload,
                         },
                         {"type": "text", "text": prompt},
                     ],

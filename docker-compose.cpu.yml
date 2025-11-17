@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   minio:
     image: minio/minio:latest
@@ -74,14 +72,10 @@ services:
       OCR_MINIO_SECURE: ${OCR_MINIO_SECURE:-false}
       OCR_MINIO_DEFAULT_BUCKET: ${OCR_MINIO_DEFAULT_BUCKET:-ocr-results}
       OCR_PERSIST_RESULTS_BY_DEFAULT: ${OCR_PERSIST_RESULTS_BY_DEFAULT:-false}
-      OCR_PADDLE_ENDPOINT: ${OCR_PADDLE_ENDPOINT:-http://paddle-ocr:9000}
-      OCR_PADDLE_TIMEOUT: ${OCR_PADDLE_TIMEOUT:-60}
     ports:
       - "${OCR_HTTP_PORT:-8001}:8001"
     depends_on:
       minio:
-        condition: service_started
-      deepseek-ocr:
         condition: service_started
     networks:
       - deepseek-internal
@@ -91,32 +85,12 @@ services:
       context: .
       dockerfile: services/paddle-ocr/Dockerfile
       args:
-        BASE_IMAGE: ${PADDLE_BASE_IMAGE:-paddlepaddle/paddle:3.2.2-gpu-cuda12.6-cudnn9.5}
+        BASE_IMAGE: ${PADDLE_BASE_IMAGE:-ccr-2vdh3abv-pub.cnc.bj.baidubce.com/paddlepaddle/paddle:3.0.0}
     container_name: ${COMPOSE_PROJECT_NAME:-deepseek-ocr}-paddle
     environment:
       PADDLE_LANG: ${PADDLE_LANG:-ch}
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - capabilities: [gpu]
-    networks:
-      - deepseek-internal
-
-  deepseek-ocr:
-    build:
-      context: .
-      dockerfile: services/deepseek-ocr/Dockerfile
-    container_name: ${COMPOSE_PROJECT_NAME:-deepseek-ocr}-deepseek
-    environment:
-      CUDA_VISIBLE_DEVICES: ${DEEPSEEK_CUDA_VISIBLE_DEVICES:-0}
     ports:
-      - "${DEEPSEEK_HTTP_PORT:-8000}:8000"
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - capabilities: [gpu]
+      - "${PADDLE_HTTP_PORT:-19000}:9000"
     networks:
       - deepseek-internal
 

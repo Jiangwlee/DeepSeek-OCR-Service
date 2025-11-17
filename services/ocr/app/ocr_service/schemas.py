@@ -66,3 +66,9 @@ class DocumentResult(BaseModel):
     combined_text: str
     stored_bucket: Optional[str] = None
     stored_object_name: Optional[str] = None
+    source_bucket: Optional[str] = None
+    source_object_name: Optional[str] = None
+    converted_pdf_bucket: Optional[str] = None
+    converted_pdf_object: Optional[str] = None
+    image_bucket: Optional[str] = None
+    image_objects: Optional[list[str]] = None
