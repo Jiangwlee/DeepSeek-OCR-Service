@@ -59,11 +59,12 @@ class OCROrchestrator:
         return await self._process_payload(payload, request)
 
     async def process_url(self, request) -> DocumentResult:
+        url = str(request.source.url)
         async with httpx.AsyncClient() as client:
-            response = await client.get(request.source.url)
+            response = await client.get(url)
             response.raise_for_status()
             content_type = response.headers.get("content-type")
-            filename = request.source.url.split("/")[-1] or f"remote-{uuid.uuid4().hex}"
+            filename = url.split("/")[-1] or f"remote-{uuid.uuid4().hex}"
             data = response.content
         payload = FilePayload(filename=filename, content_type=content_type, data=data)
         return await self._process_payload(payload, request)
@@ -76,7 +77,7 @@ class OCROrchestrator:
         pdf_bucket = None
         pdf_object = None
         if self._storage and self._settings.minio_enabled:
-            stored_orig_bucket, stored_orig_object = await self._store_original(payload, options, task_id)
+            stored_orig_bucket, stored_orig_object = await self._store_original(payload, task_id)
         else:
             raise OCRProcessException("MinIO/storage is required for processing")
 
@@ -208,10 +209,12 @@ class OCROrchestrator:
         suffix = "md" if output_format == "markdown" else "txt"
         return f"ocr-results/{task_id}/{stem}.{suffix}"
 
-    async def _store_original(self, payload: FilePayload, options: DocumentOptions, task_id: str) -> Tuple[Optional[str], Optional[str]]:
+    async def _store_original(self, payload: FilePayload, task_id: str) -> Tuple[Optional[str], Optional[str]]:
         if not self._storage:
             return None, None
-        bucket = options.store_bucket or self._settings.minio_raw_bucket
+        # Always persist raw uploads into the configured raw bucket; user-facing store_bucket
+        # option only controls where OCR results are saved.
+        bucket = self._settings.minio_raw_bucket
         object_name = f"{task_id}-{payload.filename}"
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(

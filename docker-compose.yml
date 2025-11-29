@@ -88,7 +88,11 @@ services:
       dockerfile: services/ocr/Dockerfile
     container_name: ${COMPOSE_PROJECT_NAME:-deepseek-ocr}-ocr
     restart: unless-stopped
-    test: ["CMD", "curl", "-f", "http://localhost:8001/docs/"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/docs/"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
     environment:
       OCR_DEEPSEEK_API_BASE: ${OCR_DEEPSEEK_API_BASE:-http://deepseek-ocr:8000/v1}
       OCR_DEEPSEEK_API_KEY: ${OCR_DEEPSEEK_API_KEY:-EMPTY}
@@ -170,8 +174,6 @@ services:
       VLLM_USE_MODELSCOPE: ${VLLM_USE_MODELSCOPE:-True}
       NO_PROXY: ${NO_PROXY}
       no_proxy: ${NO_PROXY}
-    ports:
-      - "${DEEPSEEK_HTTP_PORT:-8000}:8000"
     volumes:
       - ~/.cache/modelscope:/root/.cache/modelscope
       - ~/.cache/huggingface:/root/.cache/huggingface
