@@ -16,12 +16,14 @@ logger = logging.getLogger(__name__)
 
 
 class DeepSeekOCRClient:
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, api_base: Optional[str] = None, model: Optional[str] = None):
         self._settings = settings
+        self._api_base = api_base or settings.vllm_api_base
+        self._model = model or settings.vllm_model
         self._client = AsyncOpenAI(
-            api_key=settings.deepseek_api_key,
-            base_url=settings.deepseek_api_base,
-            timeout=settings.deepseek_request_timeout,
+            api_key=settings.vllm_api_key,
+            base_url=self._api_base,
+            timeout=settings.vllm_request_timeout,
         )
         self._semaphore = asyncio.Semaphore(settings.max_workers)
 
@@ -74,17 +76,18 @@ class DeepSeekOCRClient:
             ]
             try:
                 response = await self._client.chat.completions.create(
-                    model=self._settings.deepseek_model,
+                    model=self._model,
                     messages=messages,
-                    max_tokens=self._settings.deepseek_max_tokens,
-                    temperature=self._settings.deepseek_temperature,
+                    max_tokens=self._settings.vllm_max_tokens,
+                    temperature=self._settings.vllm_temperature,
                     extra_body={
                         "skip_special_tokens": skip_special_tokens,
-                        "vllm_xargs": self._settings.deepseek_vllm_xargs,
+                        "vllm_xargs": self._settings.vllm_vllm_xargs,
                     },
                 )
             except Exception as exc:  # pragma: no cover
-                logger.exception("DeepSeek OCR request failed for page %s", index)
+                logger.exception("vLLM OCR request failed for page %s (endpoint: %s, model: %s)",
+                                index, self._api_base, self._model)
                 raise OCRProcessException(str(exc)) from exc
 
             content = response.choices[0].message.content

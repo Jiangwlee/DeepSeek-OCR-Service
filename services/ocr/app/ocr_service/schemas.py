@@ -13,7 +13,7 @@ class DocumentOptions(BaseModel):
     store_result: bool = False
     store_bucket: Optional[str] = None
     store_object_name: Optional[str] = None
-    provider: Literal["deepseek", "paddle"] = "deepseek"
+    provider: str = "deepseek"  # Changed to str to support dynamic providers
 
     @classmethod
     def as_form(
@@ -23,7 +23,7 @@ class DocumentOptions(BaseModel):
         store_result: bool = Form(False),
         store_bucket: Optional[str] = Form(None),
         store_object_name: Optional[str] = Form(None),
-        provider: Literal["deepseek", "paddle"] = Form("deepseek"),
+        provider: str = Form("deepseek"),  # Changed to str
     ) -> "DocumentOptions":
         return cls(
             output_format=output_format,

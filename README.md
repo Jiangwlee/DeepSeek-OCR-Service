@@ -26,6 +26,7 @@ Every service is wired through environment variables for portability. Copy the s
 
 ```bash
 cp .env.example .env
+docker network create ocr_net
 ```
 
 Key knobs (see `.env.example` for defaults):

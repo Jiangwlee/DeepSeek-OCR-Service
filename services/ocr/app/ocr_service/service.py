@@ -18,6 +18,7 @@ from .paddle_client import PaddleOCRClient
 from .processors import FilePayload, ProcessorFactory
 from .schemas import DocumentOptions, DocumentResult, PageResult
 from .storage import StorageClient
+from .text_cleaner import strip_layout_tags
 
 
 class OCROrchestrator:
@@ -122,14 +123,8 @@ class OCROrchestrator:
                 pdf_bucket, pdf_object, expires=self._settings.minio_presign_expiry
             )
 
-        if options.provider == "deepseek":
-            skip_special = self._should_skip_special_tokens(options)
-            texts = await self._ocr_client.process_images(
-                image_urls if image_urls else images,
-                prompt,
-                skip_special_tokens=skip_special,
-            )
-        elif options.provider == "paddle":
+        if options.provider == "paddle":
+            # PaddleOCR 特殊处理
             if not self._paddle_client:
                 raise OCRProcessException("PaddleOCR client is not configured")
             if paddled_markdown_pdf_url:
@@ -139,7 +134,30 @@ class OCROrchestrator:
                     image_urls if image_urls else images, output_format=options.output_format
                 )
         else:
-            raise OCRProcessException(f"Unknown provider: {options.provider}")
+            # 使用 vLLM-based 模型 (deepseek, qwen3-vl, 或其他配置的模型)
+            model_config = self._get_model_config(options.provider)
+            if not model_config:
+                # 如果找不到配置,回退到默认的 OCR 客户端
+                skip_special = self._should_skip_special_tokens(options)
+                texts = await self._ocr_client.process_images(
+                    image_urls if image_urls else images,
+                    prompt,
+                    skip_special_tokens=skip_special,
+                )
+            else:
+                # 创建动态客户端
+                dynamic_client = DeepSeekOCRClient(
+                    self._settings,
+                    api_base=model_config["endpoint"],
+                    model=model_config["model"]
+                )
+                skip_special = self._should_skip_special_tokens(options)
+                texts = await dynamic_client.process_images(
+                    image_urls if image_urls else images,
+                    prompt,
+                    skip_special_tokens=skip_special,
+                )
+            texts = [strip_layout_tags(text) for text in texts]
 
         combined = "\n\n".join(texts)
         pages = [PageResult(index=i, text=text) for i, text in enumerate(texts)]
@@ -177,7 +195,18 @@ class OCROrchestrator:
     def _should_skip_special_tokens(self, options: DocumentOptions) -> bool:
         if options.output_format == "plain_text" or options.output_format == "markdown":
             return True
-        return self._settings.deepseek_skip_special_tokens
+        return self._settings.vllm_skip_special_tokens
+
+    def _get_model_config(self, provider: str) -> Optional[dict]:
+        """Get model configuration from UI_AVAILABLE_MODELS by provider value."""
+        try:
+            available_models = self._settings.get_available_models()
+            for model in available_models:
+                if model.get("value") == provider:
+                    return model
+        except Exception:
+            pass
+        return None
 
     async def _maybe_store_result(
         self,

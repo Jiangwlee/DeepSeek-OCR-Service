@@ -24,9 +24,11 @@ RUN pip install --upgrade pip
 # 安装依赖
 RUN pip install modelscope
 RUN pip install -U vllm --pre --extra-index-url https://wheels.vllm.ai/nightly
+# 安装Qwen3-VL所需的工具库（如果使用Qwen模型）
+RUN pip install qwen-vl-utils>=0.0.14
 
 # 复制启动脚本（注意：构建上下文为仓库根目录）
-COPY services/deepseek-ocr/run-deepseek-ocr-service.sh /app/run-deepseek-ocr-service.sh
+COPY services/vllm-service/run-vllm-service.sh /app/run-vllm-service.sh
 
 # 设置环境变量
 ENV CUDA_VISIBLE_DEVICES=0
@@ -34,4 +36,4 @@ ENV PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 ENV VLLM_USE_MODELSCOPE=True
 
 # 设置启动命令
-CMD ["bash", "/app/run-deepseek-ocr-service.sh"]
+CMD ["bash", "/app/run-vllm-service.sh"]

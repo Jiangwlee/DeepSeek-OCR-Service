@@ -30,7 +30,7 @@ async def health_check():
     settings = get_settings()
     return {
         "status": "ok",
-        "deepseek_base": settings.deepseek_api_base,
+        "vllm_base": settings.vllm_api_base,
         "minio_enabled": settings.minio_enabled,
     }
 
